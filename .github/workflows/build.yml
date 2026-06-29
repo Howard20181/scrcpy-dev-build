@@ -1,0 +1,382 @@
+name: Build scrcpy
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'scrcpy branch to build'
+        required: false
+        default: 'dev'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      scrcpy_commit: ${{ steps.commit.outputs.commit }}
+      branch: ${{ steps.branch.outputs.branch }}
+    steps:
+      - name: Resolve branch
+        id: branch
+        run: |
+          BRANCH="${{ github.event.inputs.branch || 'dev' }}"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Get scrcpy commit
+        id: commit
+        run: |
+          COMMIT=$(git ls-remote https://github.com/Genymobile/scrcpy.git "${{ steps.branch.outputs.branch }}" | cut -f1)
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Generate version string
+        id: version
+        run: |
+          DATE=$(date -u +%Y%m%d)
+          SHORT_COMMIT="${{ steps.commit.outputs.commit }}"
+          SHORT_COMMIT="${SHORT_COMMIT:0:7}"
+          VERSION="${{ steps.branch.outputs.branch }}-$DATE-$SHORT_COMMIT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build-server:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      GRADLE: gradle
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout scrcpy
+        uses: actions/checkout@v4
+        with:
+          repository: Genymobile/scrcpy
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Build server
+        run: release/build_server.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrcpy-server
+          path: release/work/build-server/server/scrcpy-server
+
+  build-linux-x86_64:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout scrcpy
+        uses: actions/checkout@v4
+        with:
+          repository: Genymobile/scrcpy
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y meson ninja-build nasm ffmpeg libavcodec-dev \
+             libavdevice-dev libavformat-dev libavutil-dev libswresample-dev \
+             libusb-1.0-0 libusb-1.0-0-dev libv4l-dev \
+             libasound2-dev libpulse-dev \
+             libaudio-dev libfribidi-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
+             libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+             libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
+             libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev libthai-dev \
+             libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev
+
+      - name: Build
+        run: release/build_linux.sh x86_64
+
+      # Tar without compression to preserve file permissions across artifact upload/download.
+      # The archive is uncompressed despite the .tar.gz extension; tar xf handles it correctly.
+      - name: Tar
+        run: |
+          cd release/work/build-linux-x86_64
+          mkdir dist-tar
+          cd dist-tar
+          tar -C .. -cvf dist.tar.gz dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-x86_64-intermediate
+          path: release/work/build-linux-x86_64/dist-tar/
+
+  build-win32:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout scrcpy
+        uses: actions/checkout@v4
+        with:
+          repository: Genymobile/scrcpy
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y meson ninja-build nasm \
+             mingw-w64 mingw-w64-tools libz-mingw-w64-dev
+
+      - name: Build
+        run: release/build_windows.sh 32
+
+      - name: Tar
+        run: |
+          cd release/work/build-win32
+          mkdir dist-tar
+          cd dist-tar
+          tar -C .. -cvf dist.tar.gz dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-win32-intermediate
+          path: release/work/build-win32/dist-tar/
+
+  build-win64:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout scrcpy
+        uses: actions/checkout@v4
+        with:
+          repository: Genymobile/scrcpy
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y meson ninja-build nasm \
+             mingw-w64 mingw-w64-tools libz-mingw-w64-dev
+
+      - name: Build
+        run: release/build_windows.sh 64
+
+      - name: Tar
+        run: |
+          cd release/work/build-win64
+          mkdir dist-tar
+          cd dist-tar
+          tar -C .. -cvf dist.tar.gz dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-win64-intermediate
+          path: release/work/build-win64/dist-tar/
+
+  build-macos-aarch64:
+    needs: prepare
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Check architecture
+        run: |
+          arch=$(uname -m)
+          if [[ "$arch" != arm64 ]]; then
+            echo "Unexpected architecture: $arch" >&2
+            exit 1
+          fi
+
+      - name: Checkout scrcpy
+        uses: actions/checkout@v4
+        with:
+          repository: Genymobile/scrcpy
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Install dependencies
+        run: |
+          brew install meson nasm libiconv zlib automake autoconf libtool
+
+      - name: Build
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.13'
+        run: release/build_macos.sh aarch64
+
+      - name: Tar
+        run: |
+          cd release/work/build-macos-aarch64
+          mkdir dist-tar
+          cd dist-tar
+          tar -C .. -cvf dist.tar.gz dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos-aarch64-intermediate
+          path: release/work/build-macos-aarch64/dist-tar/
+
+  build-macos-x86_64:
+    needs: prepare
+    runs-on: macos-13
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Check architecture
+        run: |
+          arch=$(uname -m)
+          if [[ "$arch" != x86_64 ]]; then
+            echo "Unexpected architecture: $arch" >&2
+            exit 1
+          fi
+
+      - name: Checkout scrcpy
+        uses: actions/checkout@v4
+        with:
+          repository: Genymobile/scrcpy
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Install dependencies
+        # autoconf and libtool are pre-installed on macos-13 but not on macos-latest
+        run: |
+          brew install meson nasm libiconv zlib automake autoconf libtool
+
+      - name: Build
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.13'
+        run: release/build_macos.sh x86_64
+
+      - name: Tar
+        run: |
+          cd release/work/build-macos-x86_64
+          mkdir dist-tar
+          cd dist-tar
+          tar -C .. -cvf dist.tar.gz dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos-x86_64-intermediate
+          path: release/work/build-macos-x86_64/dist-tar/
+
+  release:
+    needs:
+      - prepare
+      - build-server
+      - build-linux-x86_64
+      - build-win32
+      - build-win64
+      - build-macos-aarch64
+      - build-macos-x86_64
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout scrcpy
+        uses: actions/checkout@v4
+        with:
+          repository: Genymobile/scrcpy
+          ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: Download scrcpy-server
+        uses: actions/download-artifact@v4
+        with:
+          name: scrcpy-server
+          path: release/work/build-server/server/
+
+      - name: Download build-linux-x86_64
+        uses: actions/download-artifact@v4
+        with:
+          name: build-linux-x86_64-intermediate
+          path: release/work/build-linux-x86_64/dist-tar/
+
+      - name: Detar linux-x86_64
+        run: |
+          cd release/work/build-linux-x86_64
+          tar xf dist-tar/dist.tar.gz
+
+      - name: Download build-win32
+        uses: actions/download-artifact@v4
+        with:
+          name: build-win32-intermediate
+          path: release/work/build-win32/dist-tar/
+
+      - name: Detar win32
+        run: |
+          cd release/work/build-win32
+          tar xf dist-tar/dist.tar.gz
+
+      - name: Download build-win64
+        uses: actions/download-artifact@v4
+        with:
+          name: build-win64-intermediate
+          path: release/work/build-win64/dist-tar/
+
+      - name: Detar win64
+        run: |
+          cd release/work/build-win64
+          tar xf dist-tar/dist.tar.gz
+
+      - name: Download build-macos-aarch64
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos-aarch64-intermediate
+          path: release/work/build-macos-aarch64/dist-tar/
+
+      - name: Detar macos-aarch64
+        run: |
+          cd release/work/build-macos-aarch64
+          tar xf dist-tar/dist.tar.gz
+
+      - name: Download build-macos-x86_64
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos-x86_64-intermediate
+          path: release/work/build-macos-x86_64/dist-tar/
+
+      - name: Detar macos-x86_64
+        run: |
+          cd release/work/build-macos-x86_64
+          tar xf dist-tar/dist.tar.gz
+
+      - name: Package server
+        run: release/package_server.sh
+
+      - name: Package linux-x86_64
+        run: release/package_client.sh linux-x86_64 tar.gz
+
+      - name: Package win32
+        run: release/package_client.sh win32 zip
+
+      - name: Package win64
+        run: release/package_client.sh win64 zip
+
+      - name: Package macos-aarch64
+        run: release/package_client.sh macos-aarch64 tar.gz
+
+      - name: Package macos-x86_64
+        run: release/package_client.sh macos-x86_64 tar.gz
+
+      - name: Generate checksums
+        run: release/generate_checksums.sh
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCRCPY_COMMIT: ${{ needs.prepare.outputs.scrcpy_commit }}
+          SCRCPY_BRANCH: ${{ needs.prepare.outputs.branch }}
+        run: |
+          printf 'Automated dev build of [scrcpy](https://github.com/Genymobile/scrcpy) from the `%s` branch.\n\n**Commit**: [`%s`](https://github.com/Genymobile/scrcpy/commit/%s)\n' \
+            "$SCRCPY_BRANCH" "${SCRCPY_COMMIT:0:7}" "$SCRCPY_COMMIT" > /tmp/release-notes.md
+          gh release create "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "scrcpy $VERSION" \
+            --notes-file /tmp/release-notes.md \
+            release/output/*
