@@ -48,22 +48,22 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Checkout scrcpy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
 
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
+      - name: Setup JDK 21
+        uses: actions/setup-java@v5
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          distribution: 'temurin'
+          java-version: '21'
 
       - name: Build server
         run: release/build_server.sh
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scrcpy-server
           path: release/work/build-server/server/scrcpy-server
@@ -75,7 +75,7 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Checkout scrcpy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
@@ -103,13 +103,13 @@ jobs:
           cd release/work/build-linux-x86_64
           mkdir dist-tar
           cd dist-tar
-          tar -C .. -cvf dist.tar.gz dist/
+          tar -C .. -cvf build-linux-x86_64-intermediate.tar.gz dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: build-linux-x86_64-intermediate
-          path: release/work/build-linux-x86_64/dist-tar/
+          path: release/work/build-linux-x86_64/dist-tar/build-linux-x86_64-intermediate.tar.gz
+          archive: false
 
   build-win32:
     needs: prepare
@@ -118,7 +118,7 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Checkout scrcpy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
@@ -137,13 +137,13 @@ jobs:
           cd release/work/build-win32
           mkdir dist-tar
           cd dist-tar
-          tar -C .. -cvf dist.tar.gz dist/
+          tar -C .. -cvf build-win32-intermediate.tar.gz dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: build-win32-intermediate
-          path: release/work/build-win32/dist-tar/
+          path: release/work/build-win32/dist-tar/build-win32-intermediate.tar.gz
+          archive: false
 
   build-win64:
     needs: prepare
@@ -152,7 +152,7 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Checkout scrcpy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
@@ -171,13 +171,13 @@ jobs:
           cd release/work/build-win64
           mkdir dist-tar
           cd dist-tar
-          tar -C .. -cvf dist.tar.gz dist/
+          tar -C .. -cvf build-win64-intermediate.tar.gz dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: build-win64-intermediate
-          path: release/work/build-win64/dist-tar/
+          path: release/work/build-win64/dist-tar/build-win64-intermediate.tar.gz
+          archive: false
 
   build-macos-aarch64:
     needs: prepare
@@ -194,7 +194,7 @@ jobs:
           fi
 
       - name: Checkout scrcpy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
@@ -213,17 +213,17 @@ jobs:
           cd release/work/build-macos-aarch64
           mkdir dist-tar
           cd dist-tar
-          tar -C .. -cvf dist.tar.gz dist/
+          tar -C .. -cvf build-macos-aarch64-intermediate.tar.gz dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: build-macos-aarch64-intermediate
-          path: release/work/build-macos-aarch64/dist-tar/
+          path: release/work/build-macos-aarch64/dist-tar/build-macos-aarch64-intermediate.tar.gz
+          archive: false
 
   build-macos-x86_64:
     needs: prepare
-    runs-on: macos-13
+    runs-on: macos-15-intel
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
@@ -236,13 +236,13 @@ jobs:
           fi
 
       - name: Checkout scrcpy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
 
       - name: Install dependencies
-        # autoconf and libtool are pre-installed on macos-13 but not on macos-latest
+        # autoconf and libtool are pre-installed on macos-15-intel but not on macos-latest
         run: |
           brew install meson nasm libiconv zlib automake autoconf libtool
 
@@ -256,13 +256,13 @@ jobs:
           cd release/work/build-macos-x86_64
           mkdir dist-tar
           cd dist-tar
-          tar -C .. -cvf dist.tar.gz dist/
+          tar -C .. -cvf build-macos-x86_64-intermediate.tar.gz dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: build-macos-x86_64-intermediate
-          path: release/work/build-macos-x86_64/dist-tar/
+          path: release/work/build-macos-x86_64/dist-tar/build-macos-x86_64-intermediate.tar.gz
+          archive: false
 
   release:
     needs:
@@ -280,7 +280,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout scrcpy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
@@ -294,57 +294,57 @@ jobs:
       - name: Download build-linux-x86_64
         uses: actions/download-artifact@v4
         with:
-          name: build-linux-x86_64-intermediate
+          name: build-linux-x86_64-intermediate.tar.gz
           path: release/work/build-linux-x86_64/dist-tar/
 
       - name: Detar linux-x86_64
         run: |
           cd release/work/build-linux-x86_64
-          tar xf dist-tar/dist.tar.gz
+          tar xf dist-tar/build-linux-x86_64-intermediate.tar.gz
 
       - name: Download build-win32
         uses: actions/download-artifact@v4
         with:
-          name: build-win32-intermediate
+          name: build-win32-intermediate.tar.gz
           path: release/work/build-win32/dist-tar/
 
       - name: Detar win32
         run: |
           cd release/work/build-win32
-          tar xf dist-tar/dist.tar.gz
+          tar xf dist-tar/build-win32-intermediate.tar.gz
 
       - name: Download build-win64
         uses: actions/download-artifact@v4
         with:
-          name: build-win64-intermediate
+          name: build-win64-intermediate.tar.gz
           path: release/work/build-win64/dist-tar/
 
       - name: Detar win64
         run: |
           cd release/work/build-win64
-          tar xf dist-tar/dist.tar.gz
+          tar xf dist-tar/build-win64-intermediate.tar.gz
 
       - name: Download build-macos-aarch64
         uses: actions/download-artifact@v4
         with:
-          name: build-macos-aarch64-intermediate
+          name: build-macos-aarch64-intermediate.tar.gz
           path: release/work/build-macos-aarch64/dist-tar/
 
       - name: Detar macos-aarch64
         run: |
           cd release/work/build-macos-aarch64
-          tar xf dist-tar/dist.tar.gz
+          tar xf dist-tar/build-macos-aarch64-intermediate.tar.gz
 
       - name: Download build-macos-x86_64
         uses: actions/download-artifact@v4
         with:
-          name: build-macos-x86_64-intermediate
+          name: build-macos-x86_64-intermediate.tar.gz
           path: release/work/build-macos-x86_64/dist-tar/
 
       - name: Detar macos-x86_64
         run: |
           cd release/work/build-macos-x86_64
-          tar xf dist-tar/dist.tar.gz
+          tar xf dist-tar/build-macos-x86_64-intermediate.tar.gz
 
       - name: Package server
         run: release/package_server.sh
