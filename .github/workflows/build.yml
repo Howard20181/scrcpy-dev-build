@@ -7,9 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       branch:
+        type: choice
         description: "scrcpy branch to build"
-        required: false
+        required: true
         default: "dev"
+        options:
+          - dev
+          - master
 
 jobs:
   prepare:
@@ -83,6 +87,12 @@ jobs:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
 
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          create-symlink: true
+          variant: "sccache"
+
       - name: Install dependencies
         run: |
           sudo apt update
@@ -126,6 +136,12 @@ jobs:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
 
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          create-symlink: true
+          variant: "sccache"
+
       - name: Install dependencies
         run: |
           sudo apt update
@@ -159,6 +175,12 @@ jobs:
         with:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          create-symlink: true
+          variant: "sccache"
 
       - name: Install dependencies
         run: |
@@ -202,6 +224,12 @@ jobs:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
 
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          create-symlink: true
+          variant: "sccache"
+
       - name: Install dependencies
         run: |
           brew trust aws/tap
@@ -244,6 +272,12 @@ jobs:
         with:
           repository: Genymobile/scrcpy
           ref: ${{ needs.prepare.outputs.branch }}
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          create-symlink: true
+          variant: "sccache"
 
       - name: Install dependencies
         # autoconf and libtool are pre-installed on macos-15-intel but not on macos-latest
