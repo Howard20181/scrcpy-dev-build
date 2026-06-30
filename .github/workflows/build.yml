@@ -204,6 +204,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          brew trust aws/tap
           brew install meson nasm libiconv zlib automake autoconf libtool
 
       - name: Build
@@ -247,6 +248,7 @@ jobs:
       - name: Install dependencies
         # autoconf and libtool are pre-installed on macos-15-intel but not on macos-latest
         run: |
+          brew trust aws/tap
           brew install meson nasm libiconv zlib automake autoconf libtool
 
       - name: Build
@@ -289,13 +291,13 @@ jobs:
           ref: ${{ needs.prepare.outputs.branch }}
 
       - name: Download scrcpy-server
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: scrcpy-server
           path: release/work/build-server/server/
 
       - name: Download build-linux-x86_64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-linux-x86_64-intermediate.tar.gz
           path: release/work/build-linux-x86_64/dist-tar/
@@ -306,7 +308,7 @@ jobs:
           tar xf dist-tar/build-linux-x86_64-intermediate.tar.gz
 
       - name: Download build-win32
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-win32-intermediate.tar.gz
           path: release/work/build-win32/dist-tar/
@@ -317,7 +319,7 @@ jobs:
           tar xf dist-tar/build-win32-intermediate.tar.gz
 
       - name: Download build-win64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-win64-intermediate.tar.gz
           path: release/work/build-win64/dist-tar/
@@ -328,7 +330,7 @@ jobs:
           tar xf dist-tar/build-win64-intermediate.tar.gz
 
       - name: Download build-macos-aarch64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-macos-aarch64-intermediate.tar.gz
           path: release/work/build-macos-aarch64/dist-tar/
@@ -339,7 +341,7 @@ jobs:
           tar xf dist-tar/build-macos-aarch64-intermediate.tar.gz
 
       - name: Download build-macos-x86_64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-macos-x86_64-intermediate.tar.gz
           path: release/work/build-macos-x86_64/dist-tar/
