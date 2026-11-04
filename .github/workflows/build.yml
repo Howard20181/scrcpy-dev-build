@@ -90,6 +90,8 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@main
         with:
+          key: linux-x86_64
+          restore-keys: linux-x86_64
           create-symlink: true
           variant: "sccache"
 
@@ -257,6 +259,8 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@main
         with:
+          key: macos-aarch64
+          restore-keys: macos-aarch64
           create-symlink: true
           variant: "sccache"
 
@@ -306,6 +310,8 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@main
         with:
+          key: macos-x86_64
+          restore-keys: macos-x86_64
           create-symlink: true
           variant: "sccache"
 
