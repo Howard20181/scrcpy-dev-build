@@ -75,12 +75,50 @@ jobs:
           name: scrcpy-server
           path: release/work/build-server/server/scrcpy-server
 
-  build-linux-x86_64:
+  build:
+    name: build (${{ matrix.name }})
     needs: prepare
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-latest
+            deps: linux
+            command: release/build_linux.sh x86_64
+          - name: win32
+            runner: ubuntu-latest
+            deps: mingw
+            command: release/build_windows.sh 32
+          - name: win64
+            runner: ubuntu-latest
+            deps: mingw
+            command: release/build_windows.sh 64
+          - name: macos-aarch64
+            runner: macos-latest
+            deps: macos
+            arch: arm64
+            deployment_target: "10.13"
+            command: release/build_macos.sh aarch64
+          - name: macos-x86_64
+            runner: macos-26-intel
+            deps: macos
+            arch: x86_64
+            deployment_target: "10.13"
+            command: release/build_macos.sh x86_64
+    runs-on: ${{ matrix.runner }}
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
+      - name: Check architecture
+        if: matrix.arch
+        run: |
+          arch=$(uname -m)
+          if [[ "$arch" != "${{ matrix.arch }}" ]]; then
+            echo "Unexpected architecture: $arch" >&2
+            exit 1
+          fi
+
       - name: Checkout scrcpy
         uses: actions/checkout@v7
         with:
@@ -90,12 +128,13 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@main
         with:
-          key: linux-x86_64
-          restore-keys: linux-x86_64
+          key: ${{ matrix.name }}
+          restore-keys: ${{ matrix.name }}
           create-symlink: true
           variant: "sccache"
 
-      - name: Install dependencies
+      - name: Install dependencies (Linux)
+        if: matrix.deps == 'linux'
         run: |
           sudo apt update
           sudo apt install -y meson ninja-build nasm ffmpeg libavcodec-dev \
@@ -108,10 +147,24 @@ jobs:
              libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev libthai-dev \
              libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev
 
+      - name: Install dependencies (MinGW)
+        if: matrix.deps == 'mingw'
+        run: |
+          sudo apt update
+          sudo apt install -y meson ninja-build nasm \
+             mingw-w64 mingw-w64-tools libz-mingw-w64-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.deps == 'macos'
+        run: |
+          brew trust aws/tap
+          brew install meson nasm libiconv zlib automake autoconf libtool
+
       # meson only prepends sccache to compilers it auto-detects, and CMake and
       # FFmpeg's configure never do. Wrap every compiler name instead, and name
       # the wrapper explicitly so meson does not wrap it a second time.
       - name: Route the compilers through sccache
+        if: matrix.deps != 'mingw'
         run: |
           sccache_bin="$(command -v sccache)"
           for tool in cc gcc g++ c++; do
@@ -123,56 +176,10 @@ jobs:
             echo "/usr/local/bin" >> "$GITHUB_PATH"
           fi
 
-      - name: Build
-        env:
-          CC: /usr/local/bin/cc
-          CXX: /usr/local/bin/c++
-        run: release/build_linux.sh x86_64
-
-      # Tar without compression to preserve file permissions across artifact upload/download.
-      # The archive is uncompressed despite the .tar.gz extension; tar xf handles it correctly.
-      - name: Tar
-        run: |
-          cd release/work/build-linux-x86_64
-          mkdir dist-tar
-          cd dist-tar
-          tar -C .. -cvf build-linux-x86_64-intermediate.tar.gz dist/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          path: release/work/build-linux-x86_64/dist-tar/build-linux-x86_64-intermediate.tar.gz
-          archive: false
-
-  build-win32:
-    needs: prepare
-    runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ needs.prepare.outputs.version }}
-    steps:
-      - name: Checkout scrcpy
-        uses: actions/checkout@v7
-        with:
-          repository: Genymobile/scrcpy
-          ref: ${{ needs.prepare.outputs.branch }}
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@main
-        with:
-          key: win32
-          restore-keys: win32
-          create-symlink: true
-          variant: "sccache"
-
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y meson ninja-build nasm \
-             mingw-w64 mingw-w64-tools libz-mingw-w64-dev
-
-      # meson and FFmpeg resolve the cross compiler by name, so they only reach
-      # sccache through a wrapper on PATH.
+      # The cross file names the compilers, so they only reach sccache through
+      # a wrapper on PATH.
       - name: Route the cross compilers through sccache
+        if: matrix.deps == 'mingw'
         run: |
           sccache_bin="$(command -v sccache)"
           for host in i686-w64-mingw32 x86_64-w64-mingw32; do
@@ -184,222 +191,35 @@ jobs:
           done
 
       - name: Build
-        run: release/build_windows.sh 32
-
-      - name: Tar
-        run: |
-          cd release/work/build-win32
-          mkdir dist-tar
-          cd dist-tar
-          tar -C .. -cvf build-win32-intermediate.tar.gz dist/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          path: release/work/build-win32/dist-tar/build-win32-intermediate.tar.gz
-          archive: false
-
-  build-win64:
-    needs: prepare
-    runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ needs.prepare.outputs.version }}
-    steps:
-      - name: Checkout scrcpy
-        uses: actions/checkout@v7
-        with:
-          repository: Genymobile/scrcpy
-          ref: ${{ needs.prepare.outputs.branch }}
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@main
-        with:
-          key: win64
-          restore-keys: win64
-          create-symlink: true
-          variant: "sccache"
-
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y meson ninja-build nasm \
-             mingw-w64 mingw-w64-tools libz-mingw-w64-dev
-
-      # meson and FFmpeg resolve the cross compiler by name, so they only reach
-      # sccache through a wrapper on PATH.
-      - name: Route the cross compilers through sccache
-        run: |
-          sccache_bin="$(command -v sccache)"
-          for host in i686-w64-mingw32 x86_64-w64-mingw32; do
-            for tool in gcc g++; do
-              printf '#!/bin/sh\nexec %s /usr/bin/%s-%s "$@"\n' \
-                "$sccache_bin" "$host" "$tool" | sudo tee "/usr/local/bin/$host-$tool" > /dev/null
-              sudo chmod +x "/usr/local/bin/$host-$tool"
-            done
-          done
-
-      - name: Build
-        run: release/build_windows.sh 64
-
-      - name: Tar
-        run: |
-          cd release/work/build-win64
-          mkdir dist-tar
-          cd dist-tar
-          tar -C .. -cvf build-win64-intermediate.tar.gz dist/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          path: release/work/build-win64/dist-tar/build-win64-intermediate.tar.gz
-          archive: false
-
-  build-macos-aarch64:
-    needs: prepare
-    runs-on: macos-latest
-    env:
-      VERSION: ${{ needs.prepare.outputs.version }}
-    steps:
-      - name: Check architecture
-        run: |
-          arch=$(uname -m)
-          if [[ "$arch" != arm64 ]]; then
-            echo "Unexpected architecture: $arch" >&2
-            exit 1
-          fi
-
-      - name: Checkout scrcpy
-        uses: actions/checkout@v7
-        with:
-          repository: Genymobile/scrcpy
-          ref: ${{ needs.prepare.outputs.branch }}
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@main
-        with:
-          key: macos-aarch64
-          restore-keys: macos-aarch64
-          create-symlink: true
-          variant: "sccache"
-
-      - name: Install dependencies
-        run: |
-          brew trust aws/tap
-          brew install meson nasm libiconv zlib automake autoconf libtool
-
-      # meson only prepends sccache to compilers it auto-detects, and CMake and
-      # FFmpeg's configure never do. Wrap every compiler name instead, and name
-      # the wrapper explicitly so meson does not wrap it a second time.
-      - name: Route the compilers through sccache
-        run: |
-          sccache_bin="$(command -v sccache)"
-          for tool in cc gcc g++ c++; do
-            printf '#!/bin/sh\nexec %s /usr/bin/%s "$@"\n' "$sccache_bin" "$tool" \
-              | sudo tee "/usr/local/bin/$tool" > /dev/null
-            sudo chmod +x "/usr/local/bin/$tool"
-          done
-          if [[ "$(command -v cc)" != /usr/local/bin/cc ]]; then
-            echo "/usr/local/bin" >> "$GITHUB_PATH"
-          fi
-
-      - name: Build
+        if: matrix.deps != 'mingw'
         env:
-          MACOSX_DEPLOYMENT_TARGET: "10.13"
           CC: /usr/local/bin/cc
           CXX: /usr/local/bin/c++
-        run: release/build_macos.sh aarch64
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+        run: ${{ matrix.command }}
+
+      - name: Build (cross-compiled)
+        if: matrix.deps == 'mingw'
+        run: ${{ matrix.command }}
 
       - name: Tar
         run: |
-          cd release/work/build-macos-aarch64
-          mkdir dist-tar
+          cd "release/work/build-${{ matrix.name }}"
+          mkdir -p dist-tar
           cd dist-tar
-          tar -C .. -cvf build-macos-aarch64-intermediate.tar.gz dist/
+          tar -C .. -cvf "${{ matrix.name }}-intermediate.tar.gz" dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          path: release/work/build-macos-aarch64/dist-tar/build-macos-aarch64-intermediate.tar.gz
-          archive: false
-
-  build-macos-x86_64:
-    needs: prepare
-    runs-on: macos-15-intel
-    env:
-      VERSION: ${{ needs.prepare.outputs.version }}
-    steps:
-      - name: Check architecture
-        run: |
-          arch=$(uname -m)
-          if [[ "$arch" != x86_64 ]]; then
-            echo "Unexpected architecture: $arch" >&2
-            exit 1
-          fi
-
-      - name: Checkout scrcpy
-        uses: actions/checkout@v7
-        with:
-          repository: Genymobile/scrcpy
-          ref: ${{ needs.prepare.outputs.branch }}
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@main
-        with:
-          key: macos-x86_64
-          restore-keys: macos-x86_64
-          create-symlink: true
-          variant: "sccache"
-
-      - name: Install dependencies
-        # autoconf and libtool are pre-installed on macos-15-intel but not on macos-latest
-        run: |
-          brew trust aws/tap
-          brew install meson nasm libiconv zlib automake autoconf libtool
-
-      # meson only prepends sccache to compilers it auto-detects, and CMake and
-      # FFmpeg's configure never do. Wrap every compiler name instead, and name
-      # the wrapper explicitly so meson does not wrap it a second time.
-      - name: Route the compilers through sccache
-        run: |
-          sccache_bin="$(command -v sccache)"
-          for tool in cc gcc g++ c++; do
-            printf '#!/bin/sh\nexec %s /usr/bin/%s "$@"\n' "$sccache_bin" "$tool" \
-              | sudo tee "/usr/local/bin/$tool" > /dev/null
-            sudo chmod +x "/usr/local/bin/$tool"
-          done
-          if [[ "$(command -v cc)" != /usr/local/bin/cc ]]; then
-            echo "/usr/local/bin" >> "$GITHUB_PATH"
-          fi
-
-      - name: Build
-        env:
-          MACOSX_DEPLOYMENT_TARGET: "10.13"
-          CC: /usr/local/bin/cc
-          CXX: /usr/local/bin/c++
-        run: release/build_macos.sh x86_64
-
-      - name: Tar
-        run: |
-          cd release/work/build-macos-x86_64
-          mkdir dist-tar
-          cd dist-tar
-          tar -C .. -cvf build-macos-x86_64-intermediate.tar.gz dist/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          path: release/work/build-macos-x86_64/dist-tar/build-macos-x86_64-intermediate.tar.gz
+          path: release/work/build-${{ matrix.name }}/dist-tar/${{ matrix.name }}-intermediate.tar.gz
           archive: false
 
   release:
     needs:
       - prepare
+      - build
       - build-server
-      - build-linux-x86_64
-      - build-win32
-      - build-win64
-      - build-macos-aarch64
-      - build-macos-x86_64
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
@@ -418,78 +238,28 @@ jobs:
           name: scrcpy-server
           path: release/work/build-server/server/
 
-      - name: Download build-linux-x86_64
+      - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
-          name: build-linux-x86_64-intermediate.tar.gz
-          path: release/work/build-linux-x86_64/dist-tar/
+          pattern: "*-intermediate.tar.gz"
+          path: ${{ runner.temp }}/artifacts
 
-      - name: Detar linux-x86_64
+      - name: Unpack build artifacts
         run: |
-          cd release/work/build-linux-x86_64
-          tar xf dist-tar/build-linux-x86_64-intermediate.tar.gz
-
-      - name: Download build-win32
-        uses: actions/download-artifact@v8
-        with:
-          name: build-win32-intermediate.tar.gz
-          path: release/work/build-win32/dist-tar/
-
-      - name: Detar win32
-        run: |
-          cd release/work/build-win32
-          tar xf dist-tar/build-win32-intermediate.tar.gz
-
-      - name: Download build-win64
-        uses: actions/download-artifact@v8
-        with:
-          name: build-win64-intermediate.tar.gz
-          path: release/work/build-win64/dist-tar/
-
-      - name: Detar win64
-        run: |
-          cd release/work/build-win64
-          tar xf dist-tar/build-win64-intermediate.tar.gz
-
-      - name: Download build-macos-aarch64
-        uses: actions/download-artifact@v8
-        with:
-          name: build-macos-aarch64-intermediate.tar.gz
-          path: release/work/build-macos-aarch64/dist-tar/
-
-      - name: Detar macos-aarch64
-        run: |
-          cd release/work/build-macos-aarch64
-          tar xf dist-tar/build-macos-aarch64-intermediate.tar.gz
-
-      - name: Download build-macos-x86_64
-        uses: actions/download-artifact@v8
-        with:
-          name: build-macos-x86_64-intermediate.tar.gz
-          path: release/work/build-macos-x86_64/dist-tar/
-
-      - name: Detar macos-x86_64
-        run: |
-          cd release/work/build-macos-x86_64
-          tar xf dist-tar/build-macos-x86_64-intermediate.tar.gz
+          for archive in "$RUNNER_TEMP"/artifacts/*/*.tar.gz; do
+            name="$(basename "$archive" -intermediate.tar.gz)"
+            mkdir -p "release/work/build-$name"
+            tar xf "$archive" -C "release/work/build-$name"
+          done
 
       - name: Package server
         run: release/package_server.sh
 
-      - name: Package linux-x86_64
-        run: release/package_client.sh linux-x86_64 tar.gz
-
-      - name: Package win32
-        run: release/package_client.sh win32 zip
-
-      - name: Package win64
-        run: release/package_client.sh win64 zip
-
-      - name: Package macos-aarch64
-        run: release/package_client.sh macos-aarch64 tar.gz
-
-      - name: Package macos-x86_64
-        run: release/package_client.sh macos-x86_64 tar.gz
+      - name: Package clients
+        run: |
+          for target in linux-x86_64:tar.gz win32:zip win64:zip macos-aarch64:tar.gz macos-x86_64:tar.gz; do
+            release/package_client.sh "${target%%:*}" "${target##*:}"
+          done
 
       - name: Zip server
         run: |
