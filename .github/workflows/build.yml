@@ -139,6 +139,8 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@main
         with:
+          key: win32
+          restore-keys: win32
           create-symlink: true
           variant: "sccache"
 
@@ -147,6 +149,19 @@ jobs:
           sudo apt update
           sudo apt install -y meson ninja-build nasm \
              mingw-w64 mingw-w64-tools libz-mingw-w64-dev
+
+      # meson and FFmpeg resolve the cross compiler by name, so they only reach
+      # sccache through a wrapper on PATH.
+      - name: Route the cross compilers through sccache
+        run: |
+          sccache_bin="$(command -v sccache)"
+          for host in i686-w64-mingw32 x86_64-w64-mingw32; do
+            for tool in gcc g++; do
+              printf '#!/bin/sh\nexec %s /usr/bin/%s-%s "$@"\n' \
+                "$sccache_bin" "$host" "$tool" | sudo tee "/usr/local/bin/$host-$tool" > /dev/null
+              sudo chmod +x "/usr/local/bin/$host-$tool"
+            done
+          done
 
       - name: Build
         run: release/build_windows.sh 32
@@ -179,6 +194,8 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@main
         with:
+          key: win64
+          restore-keys: win64
           create-symlink: true
           variant: "sccache"
 
@@ -187,6 +204,19 @@ jobs:
           sudo apt update
           sudo apt install -y meson ninja-build nasm \
              mingw-w64 mingw-w64-tools libz-mingw-w64-dev
+
+      # meson and FFmpeg resolve the cross compiler by name, so they only reach
+      # sccache through a wrapper on PATH.
+      - name: Route the cross compilers through sccache
+        run: |
+          sccache_bin="$(command -v sccache)"
+          for host in i686-w64-mingw32 x86_64-w64-mingw32; do
+            for tool in gcc g++; do
+              printf '#!/bin/sh\nexec %s /usr/bin/%s-%s "$@"\n' \
+                "$sccache_bin" "$host" "$tool" | sudo tee "/usr/local/bin/$host-$tool" > /dev/null
+              sudo chmod +x "/usr/local/bin/$host-$tool"
+            done
+          done
 
       - name: Build
         run: release/build_windows.sh 64
