@@ -408,7 +408,7 @@ jobs:
           zip -j release/output/scrcpy-server-${{ needs.prepare.outputs.version }}.zip release/work/build-server/server/scrcpy-server
           rm release/output/scrcpy-server-$VERSION
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SCRCPY_COMMIT: ${{ needs.prepare.outputs.scrcpy_commit }}
@@ -416,8 +416,19 @@ jobs:
         run: |
           printf 'Automated dev build of [scrcpy](https://github.com/Genymobile/scrcpy) from the `%s` branch.\n\n**Commit**: [`%s`](https://github.com/Genymobile/scrcpy/commit/%s)\n' \
             "$SCRCPY_BRANCH" "${SCRCPY_COMMIT:0:7}" "$SCRCPY_COMMIT" > /tmp/release-notes.md
-          gh release create "$VERSION" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "scrcpy $VERSION" \
-            --notes-file /tmp/release-notes.md \
-            release/output/*
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release edit "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "scrcpy $VERSION" \
+              --notes-file /tmp/release-notes.md
+            gh release upload "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber \
+              release/output/*
+          else
+            gh release create "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "scrcpy $VERSION" \
+              --notes-file /tmp/release-notes.md \
+              release/output/*
+          fi
