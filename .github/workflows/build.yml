@@ -403,8 +403,10 @@ jobs:
       - name: Package macos-x86_64
         run: release/package_client.sh macos-x86_64 tar.gz
 
-      - name: Generate checksums
-        run: release/generate_checksums.sh
+      - name: Zip server
+        run: |
+          zip -j release/output/scrcpy-server-${{ needs.prepare.outputs.version }}.zip release/work/build-server/server/scrcpy-server
+          rm release/output/scrcpy-server-$VERSION
 
       - name: Create GitHub Release
         env:
