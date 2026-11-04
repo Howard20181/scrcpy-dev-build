@@ -108,7 +108,25 @@ jobs:
              libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev libthai-dev \
              libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev
 
+      # meson only prepends sccache to compilers it auto-detects, and CMake and
+      # FFmpeg's configure never do. Wrap every compiler name instead, and name
+      # the wrapper explicitly so meson does not wrap it a second time.
+      - name: Route the compilers through sccache
+        run: |
+          sccache_bin="$(command -v sccache)"
+          for tool in cc gcc g++ c++; do
+            printf '#!/bin/sh\nexec %s /usr/bin/%s "$@"\n' "$sccache_bin" "$tool" \
+              | sudo tee "/usr/local/bin/$tool" > /dev/null
+            sudo chmod +x "/usr/local/bin/$tool"
+          done
+          if [[ "$(command -v cc)" != /usr/local/bin/cc ]]; then
+            echo "/usr/local/bin" >> "$GITHUB_PATH"
+          fi
+
       - name: Build
+        env:
+          CC: /usr/local/bin/cc
+          CXX: /usr/local/bin/c++
         run: release/build_linux.sh x86_64
 
       # Tar without compression to preserve file permissions across artifact upload/download.
@@ -269,9 +287,26 @@ jobs:
           brew trust aws/tap
           brew install meson nasm libiconv zlib automake autoconf libtool
 
+      # meson only prepends sccache to compilers it auto-detects, and CMake and
+      # FFmpeg's configure never do. Wrap every compiler name instead, and name
+      # the wrapper explicitly so meson does not wrap it a second time.
+      - name: Route the compilers through sccache
+        run: |
+          sccache_bin="$(command -v sccache)"
+          for tool in cc gcc g++ c++; do
+            printf '#!/bin/sh\nexec %s /usr/bin/%s "$@"\n' "$sccache_bin" "$tool" \
+              | sudo tee "/usr/local/bin/$tool" > /dev/null
+            sudo chmod +x "/usr/local/bin/$tool"
+          done
+          if [[ "$(command -v cc)" != /usr/local/bin/cc ]]; then
+            echo "/usr/local/bin" >> "$GITHUB_PATH"
+          fi
+
       - name: Build
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.13"
+          CC: /usr/local/bin/cc
+          CXX: /usr/local/bin/c++
         run: release/build_macos.sh aarch64
 
       - name: Tar
@@ -321,9 +356,26 @@ jobs:
           brew trust aws/tap
           brew install meson nasm libiconv zlib automake autoconf libtool
 
+      # meson only prepends sccache to compilers it auto-detects, and CMake and
+      # FFmpeg's configure never do. Wrap every compiler name instead, and name
+      # the wrapper explicitly so meson does not wrap it a second time.
+      - name: Route the compilers through sccache
+        run: |
+          sccache_bin="$(command -v sccache)"
+          for tool in cc gcc g++ c++; do
+            printf '#!/bin/sh\nexec %s /usr/bin/%s "$@"\n' "$sccache_bin" "$tool" \
+              | sudo tee "/usr/local/bin/$tool" > /dev/null
+            sudo chmod +x "/usr/local/bin/$tool"
+          done
+          if [[ "$(command -v cc)" != /usr/local/bin/cc ]]; then
+            echo "/usr/local/bin" >> "$GITHUB_PATH"
+          fi
+
       - name: Build
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.13"
+          CC: /usr/local/bin/cc
+          CXX: /usr/local/bin/c++
         run: release/build_macos.sh x86_64
 
       - name: Tar
